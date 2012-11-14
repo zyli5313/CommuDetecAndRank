@@ -43,27 +43,29 @@ public class EigenComb {
 		  public void reduce(IntWritable key, Iterable<Text> values, 
 	                       Context context
 	                       ) throws IOException, InterruptedException {
-			  String eigen = "";
-			  String neweigen = "";
-			  for (Text val : values) {
-				  if(val.toString().charAt(0)=='v'){
-					  eigen = val.toString();
-				  }else{
-					  neweigen = val.toString();
+			  if(key.get()!=0){
+				  String eigen = "";
+				  String neweigen = "";
+				  for (Text val : values) {
+					  if(val.toString().charAt(0)=='v'){
+						  eigen = val.toString();
+					  }else{
+						  neweigen = val.toString();
+					  }
 				  }
-			  }
-			  eigen = eigen + "\t" + "v" + neweigen;
-			  result.set(eigen);
-			  context.write(key, result);
+				  eigen = eigen + "\t" + "v" + neweigen;
+				  result.set(eigen);
+				  context.write(key, result);
+			  }			  
 		  }
 	  }
 
 	  public static void main(String[] args) throws Exception {
 		  Configuration conf = new Configuration();
 		  String[] otherArgs = new GenericOptionsParser(conf, args).getRemainingArgs();
-		  if (otherArgs.length != 2) {
+		  if (otherArgs.length != 3) {
 			  System.err.println("Error!");
-			  System.exit(2);
+			  System.exit(3);
 		  }
 		    Job job = new Job(conf, "Eigen Vectors Combine");
 		    job.setJarByClass(EigenComb.class);
@@ -73,7 +75,8 @@ public class EigenComb {
 		    job.setOutputKeyClass(IntWritable.class);
 		    job.setOutputValueClass(Text.class);
 		    FileInputFormat.addInputPath(job, new Path(otherArgs[0]));
-		    FileOutputFormat.setOutputPath(job, new Path(otherArgs[1]));
+		    FileInputFormat.addInputPath(job, new Path(otherArgs[1]));
+		    FileOutputFormat.setOutputPath(job, new Path(otherArgs[2]));
 		    System.exit(job.waitForCompletion(true) ? 0 : 1);
 	  }
 	}
