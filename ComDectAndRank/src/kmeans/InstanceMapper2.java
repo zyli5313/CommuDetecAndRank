@@ -53,14 +53,17 @@ public class InstanceMapper2 extends MapReduceBase implements
   }
 
   public static class OutPartitioner implements Partitioner<IntWritable, Text> {
+    private int num_nodes = 0;
+    
     @Override
     public void configure(JobConf job) {
+      num_nodes = Integer.parseInt(job.get("num_nodes"));
     }
 
     @Override
     public int getPartition(IntWritable key, Text value, int numPartitions) {
       // order by ascending 
-      return key.get() / numPartitions;
+      return key.get() / (num_nodes / numPartitions);
     }
   }
 

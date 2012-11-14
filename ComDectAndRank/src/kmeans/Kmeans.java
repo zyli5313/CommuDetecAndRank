@@ -10,6 +10,8 @@ import java.util.*;
 import java.net.URI;
 
 import kmeans.InstanceMapper2.OutPartitioner;
+import kmeans.InstanceReduce2.InstanceReducer2;
+import kmeans.InstanceReduce2.InstanceReducerNokey2;
 
 import org.apache.hadoop.conf.*;
 import org.apache.hadoop.fs.*;
@@ -23,16 +25,17 @@ public class Kmeans extends Configured implements Tool {
   
   private int num_clusters, number_nodes, nreducers;
   private Path init_path, in_path, out_path;
+  private boolean outkey;
 
   private Kmeans() {
   } // singleton
 
   public int run(String[] args) {
-    if (args.length != 6) {
+    if (args.length != 7) {
       /*
        * System.out.println(args.length); for (String s: args) System.out.println(s);
        */
-      System.out.println("Usage: Kmeans <in> <out> <init> <# of clusters> <# of nodes> <# reducers>");
+      System.out.println("Usage: Kmeans <in> <out> <init> <# of clusters> <# of nodes> <# reducers> <nooutkey or outkey>");
       ToolRunner.printGenericCommandUsage(System.out);
       return -1;
     }
@@ -50,6 +53,7 @@ public class Kmeans extends Configured implements Tool {
       num_clusters = Integer.parseInt(args[3]);
       number_nodes = Integer.parseInt(args[4]);
       nreducers = Integer.parseInt(args[5]);
+      outkey = args[6].equals("outkey") ? true : false;   // final output file contains key or not
       double error = ((double) 0.01 / (double) number_nodes);
 
       /*System.out.println(in_path.toString());
@@ -108,11 +112,17 @@ public class Kmeans extends Configured implements Tool {
         DistributedCache.addCacheFile(uri, conf);
       }
 
+      conf.set("num_nodes", "" + number_nodes);
+      
       conf.setMapOutputKeyClass(IntWritable.class);
       conf.setMapOutputValueClass(Text.class);
 
       conf.setMapperClass(InstanceMapper2.class);
-      conf.setNumReduceTasks(0);
+      if(outkey)
+        conf.setReducerClass(InstanceReducer2.class);
+      else
+        conf.setReducerClass(InstanceReducerNokey2.class);
+      conf.setNumReduceTasks(nreducers);
 
       conf.setInputFormat(TextInputFormat.class);
       conf.setOutputFormat(TextOutputFormat.class);

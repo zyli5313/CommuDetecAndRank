@@ -6,7 +6,7 @@ import java.io.*;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.io.*;
-import static org.junit.Assert.*;
+//import static org.junit.Assert.*;
 
 public class Instance implements Writable {
 

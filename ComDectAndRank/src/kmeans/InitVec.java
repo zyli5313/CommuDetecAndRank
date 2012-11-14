@@ -11,7 +11,7 @@ import org.apache.hadoop.io.*;
 import org.apache.hadoop.util.*;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
-import static org.junit.Assert.*;
+//import static org.junit.Assert.*;
 
 /**
  * InitVec: calculate the initial cluster center vector for kmeans
@@ -90,7 +90,7 @@ public class InitVec extends Configured implements Tool {
         curnum++;
       }
       
-      assertTrue("Error! curnum "+curnum+" should >= num_clusters "+num_clusters, curnum >= num_clusters);
+      //assertTrue("Error! curnum "+curnum+" should >= num_clusters "+num_clusters, curnum >= num_clusters);
       for (int i = 0; i < ins.size() && i < num_clusters; i++) {
         output.collect(new Text(i + ""), ins.get(i).toText());
       }

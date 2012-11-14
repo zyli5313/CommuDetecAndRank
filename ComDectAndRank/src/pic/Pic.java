@@ -30,7 +30,7 @@ import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.io.*;
 import org.apache.hadoop.mapred.*;
 import org.apache.hadoop.util.*;
-import static org.junit.Assert.*;
+//import static org.junit.Assert.*;
 
 class MinMaxInfo {
   public double min;
@@ -115,7 +115,7 @@ public class Pic extends Configured implements Tool {
             output.collect(key, new Text("s" + vt));
         }
         else { // edge : ROWID
-          assertEquals("line error r1:"+line_text, 2, line.length);
+          //assertEquals("line error r1:"+line_text, 2, line.length);
           
           // src \t weight
           src_nodes_list.add(Integer.parseInt(line[0]));
@@ -153,7 +153,7 @@ public class Pic extends Configured implements Tool {
             final OutputCollector<IntWritable, Text> output, final Reporter reporter)
             throws IOException {
       final String[] line = value.toString().split("\t");
-      assertEquals("line error m2:"+value.toString(), 2, line.length);
+      //assertEquals("line error m2:"+value.toString(), 2, line.length);
       
       output.collect(new IntWritable(Integer.parseInt(line[0])), new Text(line[1]));
     }

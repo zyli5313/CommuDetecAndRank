@@ -29,7 +29,7 @@ import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.io.*;
 import org.apache.hadoop.mapred.*;
 import org.apache.hadoop.util.*;
-import static org.junit.Assert.*;
+//import static org.junit.Assert.*;
 
 public class RowNorm extends Configured implements Tool {
   // ////////////////////////////////////////////////////////////////////
@@ -57,7 +57,7 @@ public class RowNorm extends Configured implements Tool {
       final String[] line = line_text.split("\t");
       //if (line.length < 2) // ignore ill-formated data.
       //  return;
-      assertEquals("line error m1:"+value.toString(), 3, line.length);
+      //assertEquals("line error m1:"+value.toString(), 3, line.length);
 
       int src_id = Integer.parseInt(line[0]);
       int dst_id = Integer.parseInt(line[1]);
@@ -80,7 +80,7 @@ public class RowNorm extends Configured implements Tool {
       
       while (values.hasNext()) {
         String[] cur_value_strs = values.next().toString().split("\t");
-        assertEquals("line error r1:"+cur_value_strs.toString(), 2, cur_value_strs.length);
+        //assertEquals("line error r1:"+cur_value_strs.toString(), 2, cur_value_strs.length);
         
         dst_nodes_list.add(Integer.parseInt(cur_value_strs[0]));
         rowtotal += Double.parseDouble(cur_value_strs[1]);
