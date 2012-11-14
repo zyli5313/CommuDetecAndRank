@@ -9,8 +9,8 @@ import org.apache.hadoop.mapred.*;
 import org.apache.hadoop.conf.*;
 import org.apache.hadoop.io.*;
 import org.apache.hadoop.util.*;
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
+//import org.apache.commons.logging.Log;
+//import org.apache.commons.logging.LogFactory;
 //import static org.junit.Assert.*;
 
 /**
@@ -23,7 +23,7 @@ public class InitVec extends Configured implements Tool {
 
   private int num_clusters, num_nodes, nreducers;
 
-  private static final Log LOG = LogFactory.getLog(InitVec.class);
+  //private static final Log LOG = LogFactory.getLog(InitVec.class);
 
   public static class InitVecMapper extends MapReduceBase implements
           Mapper<LongWritable, Text, IntWritable, Instance> {
@@ -47,7 +47,7 @@ public class InitVec extends Configured implements Tool {
     public void map(LongWritable key, Text value, OutputCollector<IntWritable, Instance> output,
             Reporter reporter) throws IOException {
       String line = value.toString();
-      LOG.info("initVec_line:" + line);
+      //LOG.info("initVec_line:" + line);
 
       Instance instance = new Instance(line);
 

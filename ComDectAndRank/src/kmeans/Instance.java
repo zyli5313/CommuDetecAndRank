@@ -3,8 +3,8 @@ package kmeans;
 import java.util.Arrays;
 import java.io.*;
 
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
+//import org.apache.commons.logging.Log;
+//import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.io.*;
 //import static org.junit.Assert.*;
 
@@ -14,7 +14,7 @@ public class Instance implements Writable {
   double[] data;
   double weight;
   
-  private static final Log LOG = LogFactory.getLog(InitVec.class);
+  //private static final Log LOG = LogFactory.getLog(InitVec.class);
 
   public Instance() {
   }
