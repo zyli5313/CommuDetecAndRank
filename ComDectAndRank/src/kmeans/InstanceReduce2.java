@@ -15,7 +15,9 @@ public class InstanceReduce2 {
             OutputCollector<IntWritable, Text> output, Reporter reporter) throws IOException {
       int num = 0;
       while (instances.hasNext()) {
-        output.collect(id, instances.next());
+        // cluster if starts from 1
+        int assign = Integer.parseInt(instances.next().toString());
+        output.collect(id, new Text((assign+1) + ""));
         num++;
       }
 
@@ -30,7 +32,8 @@ public class InstanceReduce2 {
             OutputCollector<NullWritable, Text> output, Reporter reporter) throws IOException {
       int num = 0;
       while (instances.hasNext()) {
-        output.collect(NullWritable.get(), instances.next());
+        int assign = Integer.parseInt(instances.next().toString());
+        output.collect(NullWritable.get(), new Text((assign+1) + ""));
         num++;
       }
 

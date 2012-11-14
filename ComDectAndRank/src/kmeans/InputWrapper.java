@@ -68,6 +68,7 @@ public class InputWrapper extends Configured implements Tool {
     if(fs.exists(out_path))
       fs.delete(out_path, true);
 
+    System.out.println("[Kmeans] Input Wrapper for kmeans.");
     JobClient.runJob(configWrapper());
     return 0;
   }

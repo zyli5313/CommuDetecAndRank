@@ -23,7 +23,7 @@ import org.apache.hadoop.util.*;
 
 public class Kmeans extends Configured implements Tool {
   
-  private int num_clusters, number_nodes, nreducers;
+  private int num_clusters, number_nodes, nreducers, nmaxiter;
   private Path init_path, in_path, out_path;
   private boolean outkey;
 
@@ -31,7 +31,7 @@ public class Kmeans extends Configured implements Tool {
   } // singleton
 
   public int run(String[] args) {
-    if (args.length != 7) {
+    if (args.length != 8) {
       /*
        * System.out.println(args.length); for (String s: args) System.out.println(s);
        */
@@ -53,7 +53,8 @@ public class Kmeans extends Configured implements Tool {
       num_clusters = Integer.parseInt(args[3]);
       number_nodes = Integer.parseInt(args[4]);
       nreducers = Integer.parseInt(args[5]);
-      outkey = args[6].equals("outkey") ? true : false;   // final output file contains key or not
+      nmaxiter = Integer.parseInt(args[6]);
+      outkey = args[7].equals("outkey") ? true : false;   // final output file contains key or not
       double error = ((double) 0.01 / (double) number_nodes);
 
       /*System.out.println(in_path.toString());
@@ -103,7 +104,7 @@ public class Kmeans extends Configured implements Tool {
 
         newclusters = new Clusters(init_path, fs);
 
-      } while (newclusters.isequals(oldclusters, error) == false);
+      } while (newclusters.isequals(oldclusters, error) == false && numiter < nmaxiter);
 
       JobConf conf = new JobConf(getConf(), Kmeans.class);
       conf.setJobName("kmeans_result");
@@ -112,6 +113,7 @@ public class Kmeans extends Configured implements Tool {
         DistributedCache.addCacheFile(uri, conf);
       }
 
+      System.out.println("-----Kmeans_output-----\n");
       conf.set("num_nodes", "" + number_nodes);
       
       conf.setMapOutputKeyClass(IntWritable.class);

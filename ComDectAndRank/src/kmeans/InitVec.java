@@ -122,6 +122,7 @@ public class InitVec extends Configured implements Tool {
     if (fs.exists(out_path))
       fs.delete(out_path, true);
 
+    System.out.println("[Kmeans] Creating initial cluster centers.");
     JobClient.runJob(configInitvec());
     return 0;
   }

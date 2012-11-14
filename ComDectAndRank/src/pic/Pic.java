@@ -214,6 +214,7 @@ public class Pic extends Configured implements Tool {
 
       output.collect(key, new Text("v" + vtnext));
 
+      // store only once for every iteration
       if (change_reported == 0) {
         double diff = Math.abs(vtpre - vtnext);
         double prediff = 0.0;
@@ -230,6 +231,8 @@ public class Pic extends Configured implements Tool {
           change_reported = 1;
           
           // save diff
+          if(fs.exists(prediff_path))
+            fs.delete(prediff_path);
           FSDataOutputStream os = fs.create(prediff_path, true);
           os.writeDouble(diff);
           os.close();
@@ -369,7 +372,7 @@ public class Pic extends Configured implements Tool {
   // ////////////////////////////////////////////////////////////////////
   protected Path W_path = null;
 
-  protected Path vector_path = null;
+  protected Path finalout_path = null;
 
   protected Path tempmv_path = null;
 
@@ -416,7 +419,7 @@ public class Pic extends Configured implements Tool {
 
     int i;
     W_path = new Path(args[0]);
-    vector_path = new Path("./pic_initvec");
+    finalout_path = new Path("./pic_out");
     prediff_path = new Path("./pic_prediff");
     tempmv_path = new Path(args[1]);
     output_path = new Path(args[2]);
@@ -438,42 +441,43 @@ public class Pic extends Configured implements Tool {
       fs.delete(output_path, true);
     if(fs.exists(tempmv_path))
       fs.delete(tempmv_path, true);
-    if(fs.exists(vector_path))
-      fs.delete(vector_path, true);
+    if(fs.exists(finalout_path))
+      fs.delete(finalout_path, true);
     
     local_output_path = args[2] + "_temp";
 
     converge_threshold = ((double) 0.01 / (double) number_nodes);
 
-    System.out.println("\n-----===[PEGASUS: A Peta-Scale Graph Mining System]===-----\n");
-    System.out.println("[PEGASUS] Computing Pic. Max iteration = " + niteration
-            + ", threshold = " + converge_threshold + ", cur_iteration=" + cur_iteration + "\n");
+    System.out.println("\n-----===[PIC]===-----\n");
 
     if (cur_iteration == 1)
-      gen_initial_vector(number_nodes, vector_path);
+      gen_initial_vector(number_nodes, finalout_path);
 
     // Run pagerank until converges.
     for (i = cur_iteration; i <= niteration; i++) {
+      System.out.println("[PIC] Computing Pic. Max iteration = " + niteration
+              + ", threshold = " + converge_threshold + ", cur_iteration=" + i + "\n");
+      
       JobClient.runJob(configStage1());
       RunningJob job = JobClient.runJob(configStage2());
       
       // The counter is newly created per every iteration.
       Counters c = job.getCounters();
       long changed = c.getCounter(PrCounters.CONVERGE_CHECK);
-      System.out.println("Iteration = " + i + ", changed reducer = " + changed);
+      System.out.println("[PIC] Iteration = " + i + ", changed reducer = " + changed);
 
       if (changed == 0) {
         System.out.println("Pic vector converged. Now preparing to finish...");
-        fs.delete(vector_path);
+        fs.delete(finalout_path);
         fs.delete(tempmv_path);
-        fs.rename(output_path, vector_path);
+        fs.rename(output_path, finalout_path);  // src, dst
         break;
       }
 
       // rotate directory
-      fs.delete(vector_path);
+      fs.delete(finalout_path);
       fs.delete(tempmv_path);
-      fs.rename(output_path, vector_path);
+      fs.rename(output_path, finalout_path);
     }
 
     if (i == niteration) {
@@ -495,8 +499,8 @@ public class Pic extends Configured implements Tool {
     // find distribution of pageranks
     JobClient.runJob(configStage4(mmi.min, mmi.max));
     */
-    System.out.println("\n[PEGASUS] Pic computed.");
-    System.out.println("[PEGASUS] The final Pic are in the HDFS ./pic_vector.");
+    System.out.println("\n[PIC] Pic computed.");
+    System.out.println("[PIC] The final Pic are in the HDFS ./pic_out.");
     //System.out.println("[PEGASUS] The minium and maximum PageRanks are in the HDFS pr_minmax.");
     //System.out.println("[PEGASUS] The histogram of PageRanks in 1000 bins between min_PageRank and max_PageRank are in the HDFS pr_distr.\n");
 
@@ -574,7 +578,7 @@ public class Pic extends Configured implements Tool {
     conf.setMapperClass(MapStage1.class);
     conf.setReducerClass(RedStage1.class);
 
-    FileInputFormat.setInputPaths(conf, W_path, vector_path);
+    FileInputFormat.setInputPaths(conf, W_path, finalout_path);
     FileOutputFormat.setOutputPath(conf, tempmv_path);
 
     conf.setNumReduceTasks(nreducers);
