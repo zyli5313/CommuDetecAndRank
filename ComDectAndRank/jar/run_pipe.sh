@@ -1,7 +1,8 @@
 # run whole pic pipeline
 
-nmaxiter=15
-nnode=2879
+nmaxiter=10
+#nnode=2879
+nnode=404
 nreducer=4
 ncluster=2
 

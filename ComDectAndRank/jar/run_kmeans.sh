@@ -4,10 +4,10 @@
 # 3: kmeans
 
 # param
-ncluster=$0
-nnode=$1
-nreducer=$2
-nmaxiter=$3
+ncluster=$1
+nnode=$2
+nreducer=$3
+nmaxiter=$4
 
 # Usage: InputWrapper <input_path> <output_path> <# of tasks>
 hadoop jar pic.jar kmeans.InputWrapper ./pic_out ./pic_km_in $nreducer

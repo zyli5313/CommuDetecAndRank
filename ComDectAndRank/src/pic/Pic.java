@@ -215,27 +215,29 @@ public class Pic extends Configured implements Tool {
       output.collect(key, new Text("v" + vtnext));
 
       // store only once for every iteration
+      // TODO: convergence check is not as what as paper said
       if (change_reported == 0) {
         double diff = Math.abs(vtpre - vtnext);
-        double prediff = 0.0;
+        /*double prediff = 0.0;
         if(fs.exists(prediff_path)) {
           FSDataInputStream is = fs.open(prediff_path);
           prediff = is.readDouble();
           is.close();
         }
-        
         System.out.println("prediff:"+prediff+"\tdiff:"+diff+"\tconverge_threshold:"+converge_threshold);
-
-        if (Math.abs(diff - prediff) > converge_threshold) {
+         */
+        
+        if (diff > converge_threshold) {
           reporter.incrCounter(PrCounters.CONVERGE_CHECK, 1);
           change_reported = 1;
           
           // save diff
-          if(fs.exists(prediff_path))
+          /*if(fs.exists(prediff_path))
             fs.delete(prediff_path);
           FSDataOutputStream os = fs.create(prediff_path, true);
           os.writeDouble(diff);
-          os.close();
+          os.close();*/
+          
         }
       }
     }
