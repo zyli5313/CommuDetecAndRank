@@ -30,7 +30,7 @@ public class DegreeCount {
 		  context.write(new Text(node1.toString()),one);
 		  context.write(new Text(node2.toString()),one);
 		  context.write(new Text(node1.toString()),new IntWritable(-node2.get()));
-		  context.write(new Text(node2.toString()),new IntWritable(-node1.get()));
+		  //context.write(new Text(node2.toString()),new IntWritable(-node1.get()));
 	  }
   }
   
