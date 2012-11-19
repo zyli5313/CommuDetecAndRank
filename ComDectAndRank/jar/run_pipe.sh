@@ -2,7 +2,8 @@
 
 nmaxiter=10
 #nnode=2879
-nnode=404
+# if data idx starts from 1, nnode = real # node + 1. Otherwise nnode = real # node
+nnode=405
 nreducer=4
 ncluster=2
 

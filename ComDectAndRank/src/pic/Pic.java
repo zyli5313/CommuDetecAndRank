@@ -395,7 +395,8 @@ public class Pic extends Configured implements Tool {
   protected int nreducers = 1;
 
   protected int make_symmetric = 0; // convert directed graph to undirected graph
-
+  protected boolean start1 = false;  // data idx starts from 1?
+  
   // Main entry point.
   public static void main(final String[] args) throws Exception {
     final int result = ToolRunner.run(new Configuration(), new Pic(), args);
@@ -406,7 +407,7 @@ public class Pic extends Configured implements Tool {
   // Print the command-line usage text.
   protected static int printUsage() {
     System.out
-            .println("Pic <edge_path> <temppic_path> <output_path> <# of nodes>  <# of tasks> <max iteration> <makesym or nosym> <new or contNN>");
+            .println("Pic <edge_path> <temppic_path> <output_path> <# of nodes>  <# of tasks> <max iteration> <makesym or nosym> <new or contNN> <start0 or start1>");
 
     ToolRunner.printGenericCommandUsage(System.out);
 
@@ -415,7 +416,7 @@ public class Pic extends Configured implements Tool {
 
   // submit the map/reduce job.
   public int run(final String[] args) throws Exception {
-    if (args.length != 8) {
+    if (args.length != 9) {
       return printUsage();
     }
 
@@ -437,6 +438,11 @@ public class Pic extends Configured implements Tool {
     int cur_iteration = 1;
     if (args[7].startsWith("cont"))
       cur_iteration = Integer.parseInt(args[7].substring(4));
+    
+    if (args[8].compareTo("start0") == 0)
+      start1 = false;
+    else
+      start1 = true;
 
     FileSystem fs = FileSystem.get(getConf());
     if(fs.exists(output_path))
@@ -453,7 +459,7 @@ public class Pic extends Configured implements Tool {
     System.out.println("\n-----===[PIC]===-----\n");
 
     if (cur_iteration == 1)
-      gen_initial_vector(number_nodes, finalout_path);
+      gen_initial_vector(number_nodes, finalout_path, start1);
 
     // Run pagerank until converges.
     for (i = cur_iteration; i <= niteration; i++) {
@@ -511,7 +517,7 @@ public class Pic extends Configured implements Tool {
 
   // generate initial pic vector
   // TODO: id is not start from 0 and is not consecutive
-  public void gen_initial_vector(int number_nodes, Path vector_path) throws IOException {
+  public void gen_initial_vector(int number_nodes, Path vector_path, boolean start1) throws IOException {
     int i, j = 0;
     int milestone = number_nodes / 10;
     String file_name = "pic_init_vector.temp";
@@ -521,7 +527,9 @@ public class Pic extends Configured implements Tool {
     System.out.print("Creating initial pic vectors...");
     double initial_rank = 1.0 / (double) number_nodes;
 
-    for (i = 0; i < number_nodes; i++) {
+    // TODO: matlab label starts from 1
+    i = start1 ? 1 : 0;
+    for ( ; i < number_nodes; i++) {
       out.write(i + "\tv" + initial_rank + "\n");
       if (++j > milestone) {
         System.out.print(".");
@@ -603,7 +611,7 @@ public class Pic extends Configured implements Tool {
     conf.setReducerClass(RedStage2.class);
 
     FileInputFormat.setInputPaths(conf, tempmv_path);
-    FileOutputFormat.setOutputPath(conf, output_path);
+    FileOutputFormat.setOutputPath(conf, output_path); // per iteration output
 
     conf.setNumReduceTasks(nreducers);
 

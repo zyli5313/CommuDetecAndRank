@@ -17,5 +17,5 @@ hadoop jar pic.jar kmeans.InitVec ./pic_km_in ./pic_km_initvec $ncluster $nnode 
 
 # Usage: Kmeans <in> <out> <init> <# of clusters> <# of nodes> <# reducers> <nooutkey or outkey>
 hadoop jar pic.jar kmeans.Kmeans ./pic_km_in ./pic_km_out ./pic_km_initvec $ncluster $nnode $nreducer $nmaxiter nooutkey
-rm ../result/pic_km_out.txt
-hadoop fs -getmerge ./pic_km_out ../result/pic_km_out.txt
+rm /h/zeyuanl/code/DMProj/result/pic_km_out.txt
+hadoop fs -getmerge ./pic_km_out /h/zeyuanl/code/DMProj/result/pic_km_out.txt

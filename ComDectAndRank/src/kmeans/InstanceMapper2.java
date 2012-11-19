@@ -63,7 +63,8 @@ public class InstanceMapper2 extends MapReduceBase implements
     @Override
     public int getPartition(IntWritable key, Text value, int numPartitions) {
       // order by ascending 
-      return key.get() / (num_nodes / numPartitions);
+      // ceiling func
+      return key.get() / ((num_nodes+numPartitions-1) / numPartitions);
     }
   }
 
