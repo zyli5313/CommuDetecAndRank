@@ -22,6 +22,7 @@ public class LaplaceGen {
 	  private Text node1 = new Text();
 	  private Text node2 = new Text();
 	  private Text edge = new Text();
+	  private String degree;
 	  private DoubleWritable weight = new DoubleWritable();
 	  public void map(Object key, Text value, Context context
                     ) throws IOException, InterruptedException {
@@ -31,8 +32,15 @@ public class LaplaceGen {
 			  node1.set(itr.nextToken());
 			  node2.set(itr.nextToken());
 			  edge.set(node1.toString()+"\t"+node2.toString());
-			  weight.set(Double.parseDouble(itr.nextToken()));
-			  context.write(edge,new DoubleWritable(1/Math.sqrt(weight.get())));
+			  degree = itr.nextToken();
+			  if(degree.getBytes()[0]=='v') {
+				  degree = degree.substring(1);
+				  weight.set(Double.parseDouble(degree));
+				  context.write(edge,new DoubleWritable(weight.get()));
+			  }else{
+				  weight.set(Double.parseDouble(degree));
+				  context.write(edge,new DoubleWritable(1/Math.sqrt(weight.get())));
+			  }		  
 		  }
 	  }
   }
@@ -63,7 +71,7 @@ public class LaplaceGen {
 	    Job job = new Job(conf, "Laplace Matrix Generator");
 	    job.setJarByClass(LaplaceGen.class);
 	    job.setMapperClass(LapMapper.class);
-	    job.setCombinerClass(LapReducer.class);
+	    //job.setCombinerClass(LapReducer.class);
 	    job.setReducerClass(LapReducer.class);
 	    job.setOutputKeyClass(Text.class);
 	    job.setOutputValueClass(DoubleWritable.class);
