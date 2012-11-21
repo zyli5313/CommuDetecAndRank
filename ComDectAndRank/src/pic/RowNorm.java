@@ -29,6 +29,7 @@ import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.io.*;
 import org.apache.hadoop.mapred.*;
 import org.apache.hadoop.util.*;
+
 //import static org.junit.Assert.*;
 
 public class RowNorm extends Configured implements Tool {
@@ -55,16 +56,16 @@ public class RowNorm extends Configured implements Tool {
       // return;
 
       final String[] line = line_text.split("\t");
-      //if (line.length < 2) // ignore ill-formated data.
-      //  return;
-      //assertEquals("line error m1:"+value.toString(), 3, line.length);
+      // if (line.length < 2) // ignore ill-formated data.
+      // return;
+      // assertEquals("line error m1:"+value.toString(), 3, line.length);
 
       int src_id = Integer.parseInt(line[0]);
       int dst_id = Integer.parseInt(line[1]);
-      output.collect(new IntWritable(src_id), new Text(line[1]+"\t"+line[2]));
+      output.collect(new IntWritable(src_id), new Text(line[1] + "\t" + line[2]));
 
       if (make_symmetric == 1)
-        output.collect(new IntWritable(dst_id), new Text(line[0]+"\t"+line[2]));
+        output.collect(new IntWritable(dst_id), new Text(line[0] + "\t" + line[2]));
     }
   }
 
@@ -77,11 +78,11 @@ public class RowNorm extends Configured implements Tool {
       ArrayList<Integer> dst_nodes_list = new ArrayList<Integer>();
       ArrayList<Double> deg_list = new ArrayList<Double>();
       double rowtotal = 0.0;
-      
+
       while (values.hasNext()) {
         String[] cur_value_strs = values.next().toString().split("\t");
-        //assertEquals("line error r1:"+cur_value_strs.toString(), 2, cur_value_strs.length);
-        
+        // assertEquals("line error r1:"+cur_value_strs.toString(), 2, cur_value_strs.length);
+
         dst_nodes_list.add(Integer.parseInt(cur_value_strs[0]));
         rowtotal += Double.parseDouble(cur_value_strs[1]);
         deg_list.add(Double.parseDouble(cur_value_strs[1]));
@@ -90,14 +91,12 @@ public class RowNorm extends Configured implements Tool {
       int deg = dst_nodes_list.size();
       for (i = 0; i < deg; i++) {
         double degnorm = deg_list.get(i) / rowtotal;
-        output.collect(key, new Text(dst_nodes_list.get(i).toString()
-                + "\t" + degnorm));
-//        output.collect(new IntWritable(dst_nodes_list.get(i)), new Text(Integer.toString(key.get())
-//                + "\t" + elem_value));
+        output.collect(key, new Text(dst_nodes_list.get(i).toString() + "\t" + degnorm));
       }
 
     }
   }
+
 
   // ////////////////////////////////////////////////////////////////////
   // command line interface
@@ -146,17 +145,17 @@ public class RowNorm extends Configured implements Tool {
       make_symmetric = 0;
 
     FileSystem fs = FileSystem.get(getConf());
-    if(fs.exists(out_path))
+    if (fs.exists(out_path))
       fs.delete(out_path, true);
-    
+
     System.out.println("\n-----===[PEGASUS: A Peta-Scale Graph Mining System]===-----\n");
     System.out.println("[PEGASUS] Converting the adjacency matrix to row-normalized format.\n");
 
     JobClient.runJob(configStage1());
 
     System.out.println("\n[PEGASUS] Conversion finished.");
-    System.out.println("[PEGASUS] Row normalized adjacency matrix is saved in the HDFS "
-            + args[1] + "\n");
+    System.out.println("[PEGASUS] Row normalized adjacency matrix is saved in the HDFS " + args[1]
+            + "\n");
 
     return 0;
   }

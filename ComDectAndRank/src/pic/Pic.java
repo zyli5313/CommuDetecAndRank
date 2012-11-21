@@ -30,6 +30,7 @@ import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.io.*;
 import org.apache.hadoop.mapred.*;
 import org.apache.hadoop.util.*;
+
 //import static org.junit.Assert.*;
 
 class MinMaxInfo {
@@ -77,11 +78,11 @@ public class Pic extends Configured implements Tool {
         // since vector(i) need to be multiplied by W[:][i]
         int src_id = Integer.parseInt(line[0]);
         int dst_id = Integer.parseInt(line[1]);
-        output.collect(new IntWritable(dst_id), new Text(line[0]+"\t"+line[2]));
+        output.collect(new IntWritable(dst_id), new Text(line[0] + "\t" + line[2]));
 
         if (make_symmetric == 1)
-          output.collect(new IntWritable(src_id), new Text(line[1]+"\t"+line[2]));
-          
+          output.collect(new IntWritable(src_id), new Text(line[1] + "\t" + line[2]));
+
       }
     }
   }
@@ -112,39 +113,43 @@ public class Pic extends Configured implements Tool {
         if (line.length == 1) {
           if (line_text.charAt(0) == 'v') // vector : VALUE
             vt = Double.parseDouble(line_text.substring(1));
-            output.collect(key, new Text("s" + vt));
-        }
-        else { // edge : ROWID
-          //assertEquals("line error r1:"+line_text, 2, line.length);
-          
+          output.collect(key, new Text("s" + vt));
+        } else { // edge : src \t weight
+          // assertEquals("line error r1:"+line_text, 2, line.length);
+
           // src \t weight
           src_nodes_list.add(Integer.parseInt(line[0]));
-          weightlist.add(Double.parseDouble(line[1])); 
+          weightlist.add(Double.parseDouble(line[1]));
         }
       }
 
       // TODO: mv into the loop
-      //output.collect(key, new Text("s" + vt));
+      // output.collect(key, new Text("s" + vt));
 
-      int outdeg = src_nodes_list.size();
+      int indeg = src_nodes_list.size();
       double totalDstWeight = 0.0;
 
-      for (i = 0; i < outdeg; i++) {
+      for (i = 0; i < indeg; i++) {
         double wij = vt * weightlist.get(i);
         totalDstWeight += wij;
         output.collect(new IntWritable(src_nodes_list.get(i)), new Text("v" + wij));
       }
+
+      // prepare for adding up all elements in W*v (key==number_nodes)
+      output.collect(new IntWritable(number_nodes), new Text("t" + totalDstWeight));
+
       // add up weight by column (sum up dst combine2) to become a row vector
-      for (i = 0; i < outdeg; i++) {
-        output.collect(new IntWritable(src_nodes_list.get(i)), new Text("t" + totalDstWeight));
-      }
+      /*
+       * for (i = 0; i < indeg; i++) { output.collect(new IntWritable(src_nodes_list.get(i)), new
+       * Text("t" + totalDstWeight)); }
+       */
     }
   }
 
   // //////////////////////////////////////////////////////////////////////////////////////////////
-  // STAGE 2: merge multiplication results.
+  // STAGE 2: compute normalization sum (|W*v|L1)
   // - Input: partial multiplication results
-  // - Output: combined multiplication results
+  // - Output: normalization number and partial multiplication results
   // //////////////////////////////////////////////////////////////////////////////////////////////
   public static class MapStage2 extends MapReduceBase implements
           Mapper<LongWritable, Text, IntWritable, Text> {
@@ -153,19 +158,79 @@ public class Pic extends Configured implements Tool {
             final OutputCollector<IntWritable, Text> output, final Reporter reporter)
             throws IOException {
       final String[] line = value.toString().split("\t");
-      //assertEquals("line error m2:"+value.toString(), 2, line.length);
-      
+      // assertEquals("line error m2:"+value.toString(), 2, line.length);
+
       output.collect(new IntWritable(Integer.parseInt(line[0])), new Text(line[1]));
     }
   }
 
   public static class RedStage2 extends MapReduceBase implements
           Reducer<IntWritable, Text, IntWritable, Text> {
+    private int number_nodes = 0;
+
+    private boolean start1 = false;
+
+    public void configure(JobConf job) {
+      number_nodes = Integer.parseInt(job.get("number_nodes"));
+      start1 = Boolean.parseBoolean(job.get("start1"));
+    }
+
+    public void reduce(final IntWritable key, final Iterator<Text> values,
+            final OutputCollector<IntWritable, Text> output, final Reporter reporter)
+            throws IOException {
+      double l1norm = 0.0;
+
+      // compute total sum (l1norm)
+      // TODO: ERROR here!
+      if (key.get() == number_nodes) { // key==number_nodes does not exist actually
+        while (values.hasNext()) {
+          l1norm += Double.parseDouble(values.next().toString().substring(1));
+
+          //System.out.println("l1norm (summing up) " + l1norm);
+        }
+        // data index starts from 1
+        int i = start1 ? 1 : 0;
+        System.out.println("l1norm (output) " + l1norm);
+
+        for (; i < number_nodes; i++)
+          output.collect(new IntWritable(i), new Text("t" + l1norm));
+      }
+      // others output as normal
+      else {
+        while (values.hasNext())
+          output.collect(key, values.next());
+      }
+    }
+  }
+  
+  // //////////////////////////////////////////////////////////////////////////////////////////////
+  // STAGE 3: merge multiplication results.
+  // - Input: partial multiplication results
+  // - Output: combined multiplication results
+  // //////////////////////////////////////////////////////////////////////////////////////////////
+  public static class MapStage3 extends MapReduceBase implements
+          Mapper<LongWritable, Text, IntWritable, Text> {
+    // Identity mapper
+    public void map(final LongWritable key, final Text value,
+            final OutputCollector<IntWritable, Text> output, final Reporter reporter)
+            throws IOException {
+      final String[] line = value.toString().split("\t");
+      // assertEquals("line error m2:"+value.toString(), 2, line.length);
+
+      output.collect(new IntWritable(Integer.parseInt(line[0])), new Text(line[1]));
+    }
+  }
+
+  public static class RedStage3 extends MapReduceBase implements
+          Reducer<IntWritable, Text, IntWritable, Text> {
     int number_nodes = 0;
+
     double converge_threshold = 0;
 
     int change_reported = 0;
+
     private FileSystem fs;
+
     private Path prediff_path = new Path("./pic_prediff/prediff");
 
     public void configure(JobConf job) {
@@ -179,12 +244,11 @@ public class Pic extends Configured implements Tool {
       }
       try {
         // initialize prediff not exist
-        if(fs.exists(prediff_path))
+        if (fs.exists(prediff_path))
           fs.delete(prediff_path, true);
-        
-        System.out
-                .println("RedStage2: number_nodes = " + number_nodes + ", converge_threshold = "
-                        + converge_threshold);
+
+        System.out.println("RedStage2: number_nodes = " + number_nodes + ", converge_threshold = "
+                + converge_threshold);
       } catch (IOException e) {
         // TODO Auto-generated catch block
         e.printStackTrace();
@@ -202,173 +266,143 @@ public class Pic extends Configured implements Tool {
         String cur_value_str = values.next().toString();
         if (cur_value_str.charAt(0) == 's')
           vtpre = Double.parseDouble(cur_value_str.substring(1));
-        // in each iteration t, vtsum for every element in vec v is the same
-        else if (cur_value_str.charAt(0) == 't')
-          vtsum += Double.parseDouble(cur_value_str.substring(1));
-        else
+        else if (cur_value_str.charAt(0) == 'v')
           vtnext += Double.parseDouble(cur_value_str.substring(1));
+        else { // normalization number
+          vtsum = Double.parseDouble(cur_value_str.substring(1));
+        }
       }
 
-      // normalize
-      vtnext /= vtsum;
+      System.out.println(String.format("vtpre %f\tvtnext %f\tvtsum %f", vtpre, vtnext, vtsum));
 
+      // normalize
+      // TODO: do not normalize
+      vtnext /= vtsum;
       output.collect(key, new Text("v" + vtnext));
 
       // store only once for every iteration
       // TODO: convergence check is not as what as paper said
       if (change_reported == 0) {
         double diff = Math.abs(vtpre - vtnext);
-        /*double prediff = 0.0;
-        if(fs.exists(prediff_path)) {
+
+        System.out.println("diff:" + diff + "\tconverge_threshold:"
+                + converge_threshold);
+
+        if (diff > converge_threshold) {
+          reporter.incrCounter(PrCounters.CONVERGE_CHECK, 1);
+          change_reported = 1;
+        }
+      }
+      /*if (change_reported == 0) {
+        double diff = Math.abs(vtpre - vtnext);
+
+        double prediff = 1.0;
+        if (fs.exists(prediff_path)) {
           FSDataInputStream is = fs.open(prediff_path);
           prediff = is.readDouble();
           is.close();
         }
-        System.out.println("prediff:"+prediff+"\tdiff:"+diff+"\tconverge_threshold:"+converge_threshold);
-         */
-        
-        if (diff > converge_threshold) {
+        System.out.println("prediff:" + prediff + "\tdiff:" + diff + "\tconverge_threshold:"
+                + converge_threshold);
+
+        if (Math.abs(prediff - diff) > converge_threshold) {
           reporter.incrCounter(PrCounters.CONVERGE_CHECK, 1);
           change_reported = 1;
-          
+
           // save diff
-          /*if(fs.exists(prediff_path))
+          if (fs.exists(prediff_path))
             fs.delete(prediff_path);
           FSDataOutputStream os = fs.create(prediff_path, true);
           os.writeDouble(diff);
-          os.close();*/
-          
+          os.close();
         }
-      }
+      }*/
     }
   }
 
   /*
-  // ////////////////////////////////////////////////////////////////////
-  // STAGE 3: After finding pagerank, calculate min/max pagerank
-  // - Input: The converged PageRank vector
-  // - Output: (key 0) minimum PageRank, (key 1) maximum PageRank
-  // ////////////////////////////////////////////////////////////////////
-  public static class MapStage3 extends MapReduceBase implements
-          Mapper<LongWritable, Text, IntWritable, DoubleWritable> {
-    private final IntWritable from_node_int = new IntWritable();
-
-    public void map(final LongWritable key, final Text value,
-            final OutputCollector<IntWritable, DoubleWritable> output, final Reporter reporter)
-            throws IOException {
-      String line_text = value.toString();
-      if (line_text.startsWith("#")) // ignore comments in edge file
-        return;
-
-      final String[] line = line_text.split("\t");
-      double pagerank = Double.parseDouble(line[1].substring(1));
-      output.collect(new IntWritable(0), new DoubleWritable(pagerank));
-      output.collect(new IntWritable(1), new DoubleWritable(pagerank));
-    }
-  }
-
-  public static class RedStage3 extends MapReduceBase implements
-          Reducer<IntWritable, DoubleWritable, IntWritable, DoubleWritable> {
-    int number_nodes = 0;
-
-    double mixing_c = 0;
-
-    double random_coeff = 0;
-
-    public void configure(JobConf job) {
-      number_nodes = Integer.parseInt(job.get("number_nodes"));
-      mixing_c = Double.parseDouble(job.get("mixing_c"));
-      random_coeff = (1 - mixing_c) / (double) number_nodes;
-
-      System.out.println("RedStage2: number_nodes = " + number_nodes + ", mixing_c = " + mixing_c
-              + ", random_coeff = " + random_coeff);
-    }
-
-    public void reduce(final IntWritable key, final Iterator<DoubleWritable> values,
-            final OutputCollector<IntWritable, DoubleWritable> output, final Reporter reporter)
-            throws IOException {
-      int i;
-      double min_value = 1.0;
-      double max_value = 0.0;
-
-      int min_or_max = key.get(); // 0 : min, 1: max
-
-      while (values.hasNext()) {
-        double cur_value = values.next().get();
-
-        if (min_or_max == 0) { // find min
-          if (cur_value < min_value)
-            min_value = cur_value;
-        } else { // find max
-          if (cur_value > max_value)
-            max_value = cur_value;
-        }
-      }
-
-      if (min_or_max == 0)
-        output.collect(key, new DoubleWritable(min_value));
-      else
-        output.collect(key, new DoubleWritable(max_value));
-    }
-  }
-
-  // ////////////////////////////////////////////////////////////////////
-  // STAGE 4 : Find distribution of pageranks.
-  // - Input: The converged PageRank vector
-  // - Output: The histogram of PageRank vector in 1000 bins between min_PageRank and max_PageRank
-  // ////////////////////////////////////////////////////////////////////
-  public static class MapStage4 extends MapReduceBase implements
-          Mapper<LongWritable, Text, IntWritable, IntWritable> {
-    private final IntWritable from_node_int = new IntWritable();
-
-    double min_pr = 0;
-
-    double max_pr = 0;
-
-    double gap_pr = 0;
-
-    int hist_width = 1000;
-
-    public void configure(JobConf job) {
-      min_pr = Double.parseDouble(job.get("min_pr"));
-      max_pr = Double.parseDouble(job.get("max_pr"));
-      gap_pr = max_pr - min_pr;
-
-      System.out.println("MapStage4: min_pr = " + min_pr + ", max_pr = " + max_pr);
-    }
-
-    public void map(final LongWritable key, final Text value,
-            final OutputCollector<IntWritable, IntWritable> output, final Reporter reporter)
-            throws IOException {
-      String line_text = value.toString();
-      if (line_text.startsWith("#")) // ignore comments in edge file
-        return;
-
-      final String[] line = line_text.split("\t");
-      double pagerank = Double.parseDouble(line[1].substring(1));
-      int distr_index = (int) (hist_width * (pagerank - min_pr) / gap_pr) + 1;
-      if (distr_index == hist_width + 1)
-        distr_index = hist_width;
-      output.collect(new IntWritable(distr_index), new IntWritable(1));
-    }
-  }
-
-  public static class RedStage4 extends MapReduceBase implements
-          Reducer<IntWritable, IntWritable, IntWritable, IntWritable> {
-    public void reduce(final IntWritable key, final Iterator<IntWritable> values,
-            final OutputCollector<IntWritable, IntWritable> output, final Reporter reporter)
-            throws IOException {
-      int sum = 0;
-
-      while (values.hasNext()) {
-        int cur_value = values.next().get();
-        sum += cur_value;
-      }
-
-      output.collect(key, new IntWritable(sum));
-    }
-  }
-*/
+   * // //////////////////////////////////////////////////////////////////// // STAGE 3: After
+   * finding pagerank, calculate min/max pagerank // - Input: The converged PageRank vector // -
+   * Output: (key 0) minimum PageRank, (key 1) maximum PageRank //
+   * //////////////////////////////////////////////////////////////////// public static class
+   * MapStage3 extends MapReduceBase implements Mapper<LongWritable, Text, IntWritable,
+   * DoubleWritable> { private final IntWritable from_node_int = new IntWritable();
+   * 
+   * public void map(final LongWritable key, final Text value, final OutputCollector<IntWritable,
+   * DoubleWritable> output, final Reporter reporter) throws IOException { String line_text =
+   * value.toString(); if (line_text.startsWith("#")) // ignore comments in edge file return;
+   * 
+   * final String[] line = line_text.split("\t"); double pagerank =
+   * Double.parseDouble(line[1].substring(1)); output.collect(new IntWritable(0), new
+   * DoubleWritable(pagerank)); output.collect(new IntWritable(1), new DoubleWritable(pagerank)); }
+   * }
+   * 
+   * public static class RedStage3 extends MapReduceBase implements Reducer<IntWritable,
+   * DoubleWritable, IntWritable, DoubleWritable> { int number_nodes = 0;
+   * 
+   * double mixing_c = 0;
+   * 
+   * double random_coeff = 0;
+   * 
+   * public void configure(JobConf job) { number_nodes = Integer.parseInt(job.get("number_nodes"));
+   * mixing_c = Double.parseDouble(job.get("mixing_c")); random_coeff = (1 - mixing_c) / (double)
+   * number_nodes;
+   * 
+   * System.out.println("RedStage2: number_nodes = " + number_nodes + ", mixing_c = " + mixing_c +
+   * ", random_coeff = " + random_coeff); }
+   * 
+   * public void reduce(final IntWritable key, final Iterator<DoubleWritable> values, final
+   * OutputCollector<IntWritable, DoubleWritable> output, final Reporter reporter) throws
+   * IOException { int i; double min_value = 1.0; double max_value = 0.0;
+   * 
+   * int min_or_max = key.get(); // 0 : min, 1: max
+   * 
+   * while (values.hasNext()) { double cur_value = values.next().get();
+   * 
+   * if (min_or_max == 0) { // find min if (cur_value < min_value) min_value = cur_value; } else {
+   * // find max if (cur_value > max_value) max_value = cur_value; } }
+   * 
+   * if (min_or_max == 0) output.collect(key, new DoubleWritable(min_value)); else
+   * output.collect(key, new DoubleWritable(max_value)); } }
+   * 
+   * // //////////////////////////////////////////////////////////////////// // STAGE 4 : Find
+   * distribution of pageranks. // - Input: The converged PageRank vector // - Output: The histogram
+   * of PageRank vector in 1000 bins between min_PageRank and max_PageRank //
+   * //////////////////////////////////////////////////////////////////// public static class
+   * MapStage4 extends MapReduceBase implements Mapper<LongWritable, Text, IntWritable, IntWritable>
+   * { private final IntWritable from_node_int = new IntWritable();
+   * 
+   * double min_pr = 0;
+   * 
+   * double max_pr = 0;
+   * 
+   * double gap_pr = 0;
+   * 
+   * int hist_width = 1000;
+   * 
+   * public void configure(JobConf job) { min_pr = Double.parseDouble(job.get("min_pr")); max_pr =
+   * Double.parseDouble(job.get("max_pr")); gap_pr = max_pr - min_pr;
+   * 
+   * System.out.println("MapStage4: min_pr = " + min_pr + ", max_pr = " + max_pr); }
+   * 
+   * public void map(final LongWritable key, final Text value, final OutputCollector<IntWritable,
+   * IntWritable> output, final Reporter reporter) throws IOException { String line_text =
+   * value.toString(); if (line_text.startsWith("#")) // ignore comments in edge file return;
+   * 
+   * final String[] line = line_text.split("\t"); double pagerank =
+   * Double.parseDouble(line[1].substring(1)); int distr_index = (int) (hist_width * (pagerank -
+   * min_pr) / gap_pr) + 1; if (distr_index == hist_width + 1) distr_index = hist_width;
+   * output.collect(new IntWritable(distr_index), new IntWritable(1)); } }
+   * 
+   * public static class RedStage4 extends MapReduceBase implements Reducer<IntWritable,
+   * IntWritable, IntWritable, IntWritable> { public void reduce(final IntWritable key, final
+   * Iterator<IntWritable> values, final OutputCollector<IntWritable, IntWritable> output, final
+   * Reporter reporter) throws IOException { int sum = 0;
+   * 
+   * while (values.hasNext()) { int cur_value = values.next().get(); sum += cur_value; }
+   * 
+   * output.collect(key, new IntWritable(sum)); } }
+   */
   // ////////////////////////////////////////////////////////////////////
   // command line interface
   // ////////////////////////////////////////////////////////////////////
@@ -379,14 +413,14 @@ public class Pic extends Configured implements Tool {
   protected Path tempmv_path = null;
 
   protected Path output_path = null;
-  
-  protected Path prediff_path = null;
+
+  protected Path prediff_path = null, tempmv2_path = null;
 
   protected String local_output_path;
 
-//  protected Path minmax_path = new Path("pr_minmax");
-//
-//  protected Path distr_path = new Path("pr_distr");
+  // protected Path minmax_path = new Path("pr_minmax");
+  //
+  // protected Path distr_path = new Path("pr_distr");
 
   protected int number_nodes = 0;
 
@@ -395,8 +429,9 @@ public class Pic extends Configured implements Tool {
   protected int nreducers = 1;
 
   protected int make_symmetric = 0; // convert directed graph to undirected graph
-  protected boolean start1 = false;  // data idx starts from 1?
-  
+
+  protected boolean start1 = false; // data idx starts from 1?
+
   // Main entry point.
   public static void main(final String[] args) throws Exception {
     final int result = ToolRunner.run(new Configuration(), new Pic(), args);
@@ -407,7 +442,7 @@ public class Pic extends Configured implements Tool {
   // Print the command-line usage text.
   protected static int printUsage() {
     System.out
-            .println("Pic <edge_path> <temppic_path> <output_path> <# of nodes>  <# of tasks> <max iteration> <makesym or nosym> <new or contNN> <start0 or start1>");
+            .println("Pic <edge_path> <tempmv_path> <output_path> <# of nodes>  <# of tasks> <max iteration> <makesym or nosym> <new or contNN> <start0 or start1>");
 
     ToolRunner.printGenericCommandUsage(System.out);
 
@@ -425,6 +460,7 @@ public class Pic extends Configured implements Tool {
     finalout_path = new Path("./pic_out");
     prediff_path = new Path("./pic_prediff");
     tempmv_path = new Path(args[1]);
+    tempmv2_path = new Path("./tempmv2_path");
     output_path = new Path(args[2]);
     number_nodes = Integer.parseInt(args[3]);
     nreducers = Integer.parseInt(args[4]);
@@ -438,37 +474,38 @@ public class Pic extends Configured implements Tool {
     int cur_iteration = 1;
     if (args[7].startsWith("cont"))
       cur_iteration = Integer.parseInt(args[7].substring(4));
-    
+
     if (args[8].compareTo("start0") == 0)
       start1 = false;
     else
       start1 = true;
 
     FileSystem fs = FileSystem.get(getConf());
-    if(fs.exists(output_path))
+    if (fs.exists(output_path))
       fs.delete(output_path, true);
-    if(fs.exists(tempmv_path))
+    if (fs.exists(tempmv_path))
       fs.delete(tempmv_path, true);
-    if(fs.exists(finalout_path))
-      fs.delete(finalout_path, true);
-    
+    if (fs.exists(tempmv2_path))
+      fs.delete(tempmv2_path, true);
+
     local_output_path = args[2] + "_temp";
 
-    converge_threshold = ((double) 0.01 / (double) number_nodes);
+    converge_threshold = ((double) 0.001 / (double) number_nodes);
 
     System.out.println("\n-----===[PIC]===-----\n");
 
-    if (cur_iteration == 1)
-      gen_initial_vector(number_nodes, finalout_path, start1);
+//    if (cur_iteration == 1)
+//      gen_initial_vector(number_nodes, finalout_path, start1);
 
     // Run pagerank until converges.
     for (i = cur_iteration; i <= niteration; i++) {
-      System.out.println("[PIC] Computing Pic. Max iteration = " + niteration
-              + ", threshold = " + converge_threshold + ", cur_iteration=" + i + "\n");
-      
+      System.out.println("[PIC] Computing Pic. Max iteration = " + niteration + ", threshold = "
+              + converge_threshold + ", cur_iteration=" + i + "\n");
+
       JobClient.runJob(configStage1());
-      RunningJob job = JobClient.runJob(configStage2());
-      
+      JobClient.runJob(configStage2());
+      RunningJob job = JobClient.runJob(configStage3());
+
       // The counter is newly created per every iteration.
       Counters c = job.getCounters();
       long changed = c.getCounter(PrCounters.CONVERGE_CHECK);
@@ -478,13 +515,15 @@ public class Pic extends Configured implements Tool {
         System.out.println("Pic vector converged. Now preparing to finish...");
         fs.delete(finalout_path);
         fs.delete(tempmv_path);
-        fs.rename(output_path, finalout_path);  // src, dst
+        fs.delete(tempmv2_path);
+        fs.rename(output_path, finalout_path); // src, dst
         break;
       }
 
       // rotate directory
       fs.delete(finalout_path);
       fs.delete(tempmv_path);
+      fs.delete(tempmv2_path);
       fs.rename(output_path, finalout_path);
     }
 
@@ -493,31 +532,30 @@ public class Pic extends Configured implements Tool {
     }
 
     /*
-    // find min/max of pageranks
-    System.out.println("Finding minimum and maximum pageranks...");
-    JobClient.runJob(configStage3());
-
-    FileUtil.fullyDelete(FileSystem.getLocal(getConf()), new Path(local_output_path));
-    String new_path = local_output_path + "/";
-    fs.copyToLocalFile(minmax_path, new Path(new_path));
-
-    MinMaxInfo mmi = readMinMax(new_path);
-    System.out.println("min = " + mmi.min + ", max = " + mmi.max);
-
-    // find distribution of pageranks
-    JobClient.runJob(configStage4(mmi.min, mmi.max));
-    */
+     * // find min/max of pageranks System.out.println("Finding minimum and maximum pageranks...");
+     * JobClient.runJob(configStage3());
+     * 
+     * FileUtil.fullyDelete(FileSystem.getLocal(getConf()), new Path(local_output_path)); String
+     * new_path = local_output_path + "/"; fs.copyToLocalFile(minmax_path, new Path(new_path));
+     * 
+     * MinMaxInfo mmi = readMinMax(new_path); System.out.println("min = " + mmi.min + ", max = " +
+     * mmi.max);
+     * 
+     * // find distribution of pageranks JobClient.runJob(configStage4(mmi.min, mmi.max));
+     */
+    fs.delete(tempmv2_path);
     System.out.println("\n[PIC] Pic computed.");
     System.out.println("[PIC] The final Pic are in the HDFS ./pic_out.");
-    //System.out.println("[PEGASUS] The minium and maximum PageRanks are in the HDFS pr_minmax.");
-    //System.out.println("[PEGASUS] The histogram of PageRanks in 1000 bins between min_PageRank and max_PageRank are in the HDFS pr_distr.\n");
+    // System.out.println("[PEGASUS] The minium and maximum PageRanks are in the HDFS pr_minmax.");
+    // System.out.println("[PEGASUS] The histogram of PageRanks in 1000 bins between min_PageRank and max_PageRank are in the HDFS pr_distr.\n");
 
     return 0;
   }
 
   // generate initial pic vector
   // TODO: id is not start from 0 and is not consecutive
-  public void gen_initial_vector(int number_nodes, Path vector_path, boolean start1) throws IOException {
+  public void gen_initial_vector(int number_nodes, Path vector_path, boolean start1)
+          throws IOException {
     int i, j = 0;
     int milestone = number_nodes / 10;
     String file_name = "pic_init_vector.temp";
@@ -525,11 +563,15 @@ public class Pic extends Configured implements Tool {
     BufferedWriter out = new BufferedWriter(file);
 
     System.out.print("Creating initial pic vectors...");
-    double initial_rank = 1.0 / (double) number_nodes;
+    double initial_rank;
+    if (!start1)
+      initial_rank = 1.0 / (double) number_nodes;
+    else
+      initial_rank = 1.0 / (double) (number_nodes - 1);
 
     // TODO: matlab label starts from 1
     i = start1 ? 1 : 0;
-    for ( ; i < number_nodes; i++) {
+    for (; i < number_nodes; i++) {
       out.write(i + "\tv" + initial_rank + "\n");
       if (++j > milestone) {
         System.out.print(".");
@@ -588,7 +630,30 @@ public class Pic extends Configured implements Tool {
     conf.setMapperClass(MapStage1.class);
     conf.setReducerClass(RedStage1.class);
 
+    // first time finalout_path contains the initial vector
     FileInputFormat.setInputPaths(conf, W_path, finalout_path);
+    FileOutputFormat.setOutputPath(conf, tempmv2_path);
+
+    conf.setNumReduceTasks(nreducers);
+
+    conf.setOutputKeyClass(IntWritable.class);
+    conf.setOutputValueClass(Text.class);
+
+    return conf;
+  }
+
+  // Configure pass1
+  protected JobConf configStage2() throws Exception {
+    final JobConf conf = new JobConf(getConf(), Pic.class);
+    conf.set("number_nodes", "" + number_nodes);
+    conf.set("start1", "" + start1);
+    conf.setJobName("Pic_Stage2");
+
+    conf.setMapperClass(MapStage2.class);
+    conf.setReducerClass(RedStage2.class);
+
+    // TODO: wrong path
+    FileInputFormat.setInputPaths(conf, tempmv2_path);
     FileOutputFormat.setOutputPath(conf, tempmv_path);
 
     conf.setNumReduceTasks(nreducers);
@@ -600,15 +665,15 @@ public class Pic extends Configured implements Tool {
   }
 
   // Configure pass2
-  protected JobConf configStage2() throws Exception {
+  protected JobConf configStage3() throws Exception {
     final JobConf conf = new JobConf(getConf(), Pic.class);
     conf.set("number_nodes", "" + number_nodes);
     conf.set("converge_threshold", "" + converge_threshold);
     conf.set("prediff_path", "" + prediff_path);
-    conf.setJobName("Pic_Stage2");
+    conf.setJobName("Pic_Stage3");
 
-    conf.setMapperClass(MapStage2.class);
-    conf.setReducerClass(RedStage2.class);
+    conf.setMapperClass(MapStage3.class);
+    conf.setReducerClass(RedStage3.class);
 
     FileInputFormat.setInputPaths(conf, tempmv_path);
     FileOutputFormat.setOutputPath(conf, output_path); // per iteration output
@@ -622,50 +687,39 @@ public class Pic extends Configured implements Tool {
   }
 
   /*
-  // Configure pass3
-  protected JobConf configStage3() throws Exception {
-    final JobConf conf = new JobConf(getConf(), Pic.class);
-    conf.set("number_nodes", "" + number_nodes);
-    conf.set("mixing_c", "" + mixing_c);
-    conf.set("converge_threshold", "" + converge_threshold);
-    conf.setJobName("Pagerank_Stage3");
-
-    conf.setMapperClass(MapStage3.class);
-    conf.setReducerClass(RedStage3.class);
-    conf.setCombinerClass(RedStage3.class);
-
-    FileInputFormat.setInputPaths(conf, vector_path);
-    FileOutputFormat.setOutputPath(conf, minmax_path);
-
-    conf.setNumReduceTasks(1);
-
-    conf.setOutputKeyClass(IntWritable.class);
-    conf.setOutputValueClass(DoubleWritable.class);
-
-    return conf;
-  }
-
-  // Configure pass4
-  protected JobConf configStage4(double min_pr, double max_pr) throws Exception {
-    final JobConf conf = new JobConf(getConf(), Pic.class);
-    conf.set("min_pr", "" + min_pr);
-    conf.set("max_pr", "" + max_pr);
-
-    conf.setJobName("Pagerank_Stage4");
-
-    conf.setMapperClass(MapStage4.class);
-    conf.setReducerClass(RedStage4.class);
-    conf.setCombinerClass(RedStage4.class);
-
-    FileInputFormat.setInputPaths(conf, vector_path);
-    FileOutputFormat.setOutputPath(conf, distr_path);
-
-    conf.setNumReduceTasks(nreducers);
-
-    conf.setOutputKeyClass(IntWritable.class);
-    conf.setOutputValueClass(IntWritable.class);
-
-    return conf;
-  }
-  */
+   * // Configure pass3 protected JobConf configStage3() throws Exception { final JobConf conf = new
+   * JobConf(getConf(), Pic.class); conf.set("number_nodes", "" + number_nodes);
+   * conf.set("mixing_c", "" + mixing_c); conf.set("converge_threshold", "" + converge_threshold);
+   * conf.setJobName("Pagerank_Stage3");
+   * 
+   * conf.setMapperClass(MapStage3.class); conf.setReducerClass(RedStage3.class);
+   * conf.setCombinerClass(RedStage3.class);
+   * 
+   * FileInputFormat.setInputPaths(conf, vector_path); FileOutputFormat.setOutputPath(conf,
+   * minmax_path);
+   * 
+   * conf.setNumReduceTasks(1);
+   * 
+   * conf.setOutputKeyClass(IntWritable.class); conf.setOutputValueClass(DoubleWritable.class);
+   * 
+   * return conf; }
+   * 
+   * // Configure pass4 protected JobConf configStage4(double min_pr, double max_pr) throws
+   * Exception { final JobConf conf = new JobConf(getConf(), Pic.class); conf.set("min_pr", "" +
+   * min_pr); conf.set("max_pr", "" + max_pr);
+   * 
+   * conf.setJobName("Pagerank_Stage4");
+   * 
+   * conf.setMapperClass(MapStage4.class); conf.setReducerClass(RedStage4.class);
+   * conf.setCombinerClass(RedStage4.class);
+   * 
+   * FileInputFormat.setInputPaths(conf, vector_path); FileOutputFormat.setOutputPath(conf,
+   * distr_path);
+   * 
+   * conf.setNumReduceTasks(nreducers);
+   * 
+   * conf.setOutputKeyClass(IntWritable.class); conf.setOutputValueClass(IntWritable.class);
+   * 
+   * return conf; }
+   */
 }
