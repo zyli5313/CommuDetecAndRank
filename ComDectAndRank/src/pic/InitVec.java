@@ -55,24 +55,42 @@ public class InitVec extends Configured implements Tool {
             final OutputCollector<IntWritable, Text> output, final Reporter reporter)
             throws IOException {
       String line_text = value.toString();
+      if (line_text.startsWith("#")) // ignore comments in edge file
+        return;
 
       final String[] line = line_text.split("\t");
-
+      if (line.length < 2) // ignore ill-formated data.
+        return;
+      
       int src_id = Integer.parseInt(line[0]);
       int dst_id = Integer.parseInt(line[1]);
-      output.collect(new IntWritable(src_id), new Text(line[1] + "\t" + line[2]));
+      if (line.length == 3) {
+        output.collect(new IntWritable(src_id), new Text(line[1] + "\t" + line[2]));
+        // output every element of total matrix sum (key==num_nodes, which no one uses)
+        output.collect(new IntWritable(num_nodes), new Text(line[2]));
+      } else if (line.length == 2) {
+        output.collect(new IntWritable(src_id), new Text(line[1] + "\t" + 1.0));
+        // output every element of total matrix sum (key==num_nodes, which no one uses)
+        output.collect(new IntWritable(num_nodes), new Text(1.0 + ""));
+      }
 
-      // output every element of total matrix sum (key==num_nodes, which no one uses)
-      output.collect(new IntWritable(num_nodes), new Text(line[2]));
-
-      if (make_symmetric == 1)
-        output.collect(new IntWritable(dst_id), new Text(line[0] + "\t" + line[2]));
+      if (make_symmetric == 1) {
+        if(line.length == 3) {
+          output.collect(new IntWritable(dst_id), new Text(line[0] + "\t" + line[2]));
+          output.collect(new IntWritable(num_nodes), new Text(line[2]));
+        }
+        else if(line.length == 2) {
+          output.collect(new IntWritable(dst_id), new Text(line[0] + "\t" + 1.0));
+          output.collect(new IntWritable(num_nodes), new Text(1.0 + ""));
+        }
+      }
     }
   }
 
   public static class RedStage1 extends MapReduceBase implements
           Reducer<IntWritable, Text, IntWritable, Text> {
     private int num_nodes;
+
     private boolean start1 = false;
 
     public void configure(JobConf job) {
@@ -93,10 +111,9 @@ public class InitVec extends Configured implements Tool {
         }
         // for every node, output the total matrix sum
         int i = start1 ? 1 : 0;
-        for( ; i < num_nodes; i++)
-          output.collect(new IntWritable(i), new Text("t"+mattotal));
-      } 
-      else {
+        for (; i < num_nodes; i++)
+          output.collect(new IntWritable(i), new Text("t" + mattotal));
+      } else {
         while (values.hasNext()) {
           String[] cur_value_strs = values.next().toString().split("\t");
           // assertEquals("line error r1:"+cur_value_strs.toString(), 2, cur_value_strs.length);
@@ -135,13 +152,13 @@ public class InitVec extends Configured implements Tool {
 
       while (values.hasNext()) {
         String curval = values.next().toString();
-        if(curval.startsWith("t"))
+        if (curval.startsWith("t"))
           totalsum = Double.parseDouble(curval.substring(1));
         else
           rowsum = Double.parseDouble(curval.substring(1));
       }
 
-      output.collect(key, new Text("v" + rowsum/totalsum));
+      output.collect(key, new Text("v" + rowsum / totalsum));
     }
   }
 
@@ -149,13 +166,19 @@ public class InitVec extends Configured implements Tool {
   // command line interface
   // ////////////////////////////////////////////////////////////////////
   protected Path out_path = null;
+
   protected Path edge_path = null;
+
   protected Path tmp_path = null;
+
   protected int nreducers = 10;
+
   protected int make_symmetric = 0; // convert directed graph to undirected graph
+
   protected boolean start1 = false; // if data index starts from 1
+
   protected int num_nodes = 0;
-  
+
   // Main entry point.
   public static void main(final String[] args) throws Exception {
     final int result = ToolRunner.run(new Configuration(), new InitVec(), args);
@@ -165,7 +188,8 @@ public class InitVec extends Configured implements Tool {
 
   // Print the command-line usage text.
   protected static int printUsage() {
-    System.out.println("PicInitVec <edge_path> <output_path> <# of nodes> <# of reducers> <makesym or nosym> <start1 or start0>");
+    System.out
+            .println("PicInitVec <edge_path> <output_path> <# of nodes> <# of reducers> <makesym or nosym> <start1 or start0>  <taskid>");
 
     ToolRunner.printGenericCommandUsage(System.out);
 
@@ -174,7 +198,7 @@ public class InitVec extends Configured implements Tool {
 
   // submit the map/reduce job.
   public int run(final String[] args) throws Exception {
-    if (args.length != 6) {
+    if (args.length != 7) {
       System.out.println("args.length = " + args.length);
       int i;
       for (i = 0; i < args.length; i++) {
@@ -183,16 +207,17 @@ public class InitVec extends Configured implements Tool {
       return printUsage();
     }
 
-    tmp_path = new Path("./pic_tmpiv"); 
+    
     edge_path = new Path(args[0]);
-    out_path = new Path(args[1]);
+    tmp_path = new Path("./pic_tmpiv_"+args[6]);  //append taskid
+    out_path = new Path(args[1]+"_"+args[6]);
     num_nodes = Integer.parseInt(args[2]);
     nreducers = Integer.parseInt(args[3]);
     if (args[4].compareTo("makesym") == 0)
       make_symmetric = 1;
     else
       make_symmetric = 0;
-    
+
     if (args[5].compareTo("start1") == 0)
       start1 = true;
     else
@@ -211,11 +236,10 @@ public class InitVec extends Configured implements Tool {
     JobClient.runJob(configStage2());
 
     System.out.println("\n[PIC] creating init vec finished.");
-    System.out.println("[PIC] init vec is saved in the HDFS " + args[1]
-            + "\n");
+    System.out.println("[PIC] init vec is saved in the HDFS " + args[1] + "\n");
 
     fs.delete(tmp_path);
-    
+
     return 0;
   }
 
@@ -240,7 +264,7 @@ public class InitVec extends Configured implements Tool {
 
     return conf;
   }
-  
+
   protected JobConf configStage2() throws Exception {
     final JobConf conf = new JobConf(getConf(), InitVec.class);
     conf.set("make_symmetric", "" + make_symmetric);

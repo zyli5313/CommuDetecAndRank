@@ -49,19 +49,21 @@ public class InputWrapper extends Configured implements Tool {
   // Print the command-line usage text.
   protected static int printUsage() {
     System.out
-            .println("Usage: InputWrapper <input_path> <output_path> <# of tasks>");
+            .println("Usage: InputWrapper <input_path> <output_path> <# of tasks> <taskid>");
     ToolRunner.printGenericCommandUsage(System.out);
     return -1;
   }
 
   @Override
   public int run(String[] args) throws Exception {
-    if (args.length != 3) {
+    if (args.length != 4) {
       return printUsage();
     }
-
-    in_path = new Path(args[0]);
-    out_path = new Path(args[1]);
+    
+    String taskid = "_" + args[3];
+    
+    in_path = new Path(args[0] + taskid);
+    out_path = new Path(args[1] + taskid);
     nreducers = Integer.parseInt(args[2]);
     
     FileSystem fs = FileSystem.get(getConf());

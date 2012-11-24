@@ -52,20 +52,29 @@ public class RowNorm extends Configured implements Tool {
             final OutputCollector<IntWritable, Text> output, final Reporter reporter)
             throws IOException {
       String line_text = value.toString();
-      // if (line_text.startsWith("#")) // ignore comments in edge file
-      // return;
+      if (line_text.startsWith("#")) // ignore comments in edge file
+        return;
 
       final String[] line = line_text.split("\t");
-      // if (line.length < 2) // ignore ill-formated data.
-      // return;
+      if (line.length < 2) // ignore ill-formated data.
+        return;
       // assertEquals("line error m1:"+value.toString(), 3, line.length);
 
       int src_id = Integer.parseInt(line[0]);
       int dst_id = Integer.parseInt(line[1]);
-      output.collect(new IntWritable(src_id), new Text(line[1] + "\t" + line[2]));
-
-      if (make_symmetric == 1)
-        output.collect(new IntWritable(dst_id), new Text(line[0] + "\t" + line[2]));
+      
+      if(line.length == 3)
+        output.collect(new IntWritable(src_id), new Text(line[1] + "\t" + line[2]));
+      else if(line.length == 2) // manully assign weight to 1
+        output.collect(new IntWritable(src_id), new Text(line[1] + "\t" + 1.0));
+      
+      if (make_symmetric == 1) {
+        if(line.length == 3)
+          output.collect(new IntWritable(dst_id), new Text(line[0] + "\t" + line[2]));
+        else if(line.length == 2)
+          output.collect(new IntWritable(dst_id), new Text(line[0] + "\t" + 1.0));
+      }
+        
     }
   }
 
@@ -118,7 +127,7 @@ public class RowNorm extends Configured implements Tool {
 
   // Print the command-line usage text.
   protected static int printUsage() {
-    System.out.println("PicRowNorm <edge_path> <output_path> <# of reducers> <makesym or nosym>");
+    System.out.println("PicRowNorm <edge_path> <output_path> <# of reducers> <makesym or nosym> <taskid>");
 
     ToolRunner.printGenericCommandUsage(System.out);
 
@@ -127,7 +136,7 @@ public class RowNorm extends Configured implements Tool {
 
   // submit the map/reduce job.
   public int run(final String[] args) throws Exception {
-    if (args.length != 4) {
+    if (args.length != 5) {
       System.out.println("args.length = " + args.length);
       int i;
       for (i = 0; i < args.length; i++) {
@@ -137,7 +146,7 @@ public class RowNorm extends Configured implements Tool {
     }
 
     edge_path = new Path(args[0]);
-    out_path = new Path(args[1]);
+    out_path = new Path(args[1]+"_"+args[4]); // append taskid
     nreducers = Integer.parseInt(args[2]);
     if (args[3].compareTo("makesym") == 0)
       make_symmetric = 1;

@@ -25,17 +25,17 @@ public class Kmeans extends Configured implements Tool {
   
   private int num_clusters, number_nodes, nreducers, nmaxiter;
   private Path init_path, in_path, out_path;
-  private boolean outkey;
+  private boolean outkey, outdraw;
 
   private Kmeans() {
   } // singleton
 
   public int run(String[] args) {
-    if (args.length != 8) {
+    if (args.length != 10) {
       /*
        * System.out.println(args.length); for (String s: args) System.out.println(s);
        */
-      System.out.println("Usage: Kmeans <in> <out> <init> <# of clusters> <# of nodes> <# reducers> <nooutkey or outkey>");
+      System.out.println("Usage: Kmeans <in> <out> <init> <# of clusters> <# of nodes> <# reducers> <nooutkey or outkey> <taskid> <outdraw or nooutdraw>");
       ToolRunner.printGenericCommandUsage(System.out);
       return -1;
     }
@@ -47,9 +47,11 @@ public class Kmeans extends Configured implements Tool {
       Clusters oldclusters = null;
       Clusters newclusters = null;
 
-      in_path = new Path(args[0]);
-      out_path = new Path(args[1]);
-      init_path = new Path(args[2]);
+      String taskid = "_" + args[8];
+      
+      in_path = new Path(args[0] + taskid);
+      out_path = new Path(args[1] + taskid);
+      init_path = new Path(args[2] + taskid);
       num_clusters = Integer.parseInt(args[3]);
       number_nodes = Integer.parseInt(args[4]);
       nreducers = Integer.parseInt(args[5]);
@@ -57,6 +59,10 @@ public class Kmeans extends Configured implements Tool {
       outkey = args[7].equals("outkey") ? true : false;   // final output file contains key or not
       double error = ((double) 0.01 / (double) number_nodes);
 
+      // output .net format for drawing
+      if(args[9].equals("outdraw"))
+        outdraw = true;
+      
       /*System.out.println(in_path.toString());
       System.out.println(out_path.toString());
       System.out.println(init_path.toString());
@@ -115,6 +121,7 @@ public class Kmeans extends Configured implements Tool {
 
       System.out.println("-----Kmeans_output-----\n");
       conf.set("num_nodes", "" + number_nodes);
+      conf.set("outdraw", "" + outdraw);
       
       conf.setMapOutputKeyClass(IntWritable.class);
       conf.setMapOutputValueClass(Text.class);

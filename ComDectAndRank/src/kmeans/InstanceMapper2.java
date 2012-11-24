@@ -16,9 +16,14 @@ public class InstanceMapper2 extends MapReduceBase implements
   Clusters clusters = new Clusters();
 
   private IntWritable outint = new IntWritable();
+  private boolean outdraw = false;
+  private final int dim = 3;
 
   public void configure(JobConf job) {
     try {
+      // out put .NET format drawing data
+      outdraw = Boolean.parseBoolean(job.get("outdraw"));
+      
       Path[] clustersFiles = DistributedCache.getLocalCacheFiles(job);
       for (Path clustersFile : clustersFiles) {
         clusters.addclusters(clustersFile);
@@ -44,9 +49,23 @@ public class InstanceMapper2 extends MapReduceBase implements
           currentdis = newdis;
         }
       }
-
+      
       outint.set(Integer.parseInt(instance.instanceId));
-      output.collect(outint, idresult.toText());
+      
+      if(!outdraw){
+        int id = Integer.parseInt(idresult.toText().toString());
+        output.collect(outint, new Text((id+1)+""));
+      }
+      // output drawing data
+      else {
+        StringBuilder sb = new StringBuilder();
+        int id = Integer.parseInt(idresult.toText().toString());
+        sb.append("\""+(id+1)+"\"");
+        
+        for(int i = 0; i < dim && i < instance.data.length; i++)
+          sb.append(" " + instance.data[i]);
+        output.collect(outint, new Text(sb.toString()));
+      }
     } catch (Exception ex) {
       ex.printStackTrace();
     }

@@ -230,12 +230,13 @@ public class Pic extends Configured implements Tool {
     int change_reported = 0;
 
     private FileSystem fs;
-
-    private Path prediff_path = new Path("./pic_prediff/prediff");
+    private Path prediff_path;
+    //private Path prediff_path = new Path("./pic_prediff/part-00000");
 
     public void configure(JobConf job) {
       number_nodes = Integer.parseInt(job.get("number_nodes"));
       converge_threshold = Double.parseDouble(job.get("converge_threshold"));
+      prediff_path = new Path(job.get("prediff_path"));
       try {
         fs = FileSystem.get(job);
       } catch (IOException e) {
@@ -273,13 +274,12 @@ public class Pic extends Configured implements Tool {
         }
       }
 
-      System.out.println(String.format("vtpre %f\tvtnext %f\tvtsum %f", vtpre, vtnext, vtsum));
-
       // normalize
       // TODO: do not normalize
       vtnext /= vtsum;
       output.collect(key, new Text("v" + vtnext));
-
+      System.out.println(String.format("vtpre %f\tvtnext %f\t vtsum %f", vtpre, vtnext, vtsum));
+      
       // store only once for every iteration
       // TODO: convergence check is not as what as paper said
       if (change_reported == 0) {
@@ -296,7 +296,7 @@ public class Pic extends Configured implements Tool {
       /*if (change_reported == 0) {
         double diff = Math.abs(vtpre - vtnext);
 
-        double prediff = 1.0;
+        double prediff = 0.0;
         if (fs.exists(prediff_path)) {
           FSDataInputStream is = fs.open(prediff_path);
           prediff = is.readDouble();
@@ -422,6 +422,7 @@ public class Pic extends Configured implements Tool {
   //
   // protected Path distr_path = new Path("pr_distr");
 
+  protected double thresbase = 0.001;
   protected int number_nodes = 0;
 
   protected int niteration = 32;
@@ -442,7 +443,7 @@ public class Pic extends Configured implements Tool {
   // Print the command-line usage text.
   protected static int printUsage() {
     System.out
-            .println("Pic <edge_path> <tempmv_path> <output_path> <# of nodes>  <# of tasks> <max iteration> <makesym or nosym> <new or contNN> <start0 or start1>");
+            .println("Pic <edge_path> <base threshold> <output_path> <# of nodes>  <# of tasks> <max iteration> <makesym or nosym> <new or contNN> <start0 or start1> <taskid>");
 
     ToolRunner.printGenericCommandUsage(System.out);
 
@@ -451,17 +452,19 @@ public class Pic extends Configured implements Tool {
 
   // submit the map/reduce job.
   public int run(final String[] args) throws Exception {
-    if (args.length != 9) {
+    if (args.length != 10) {
       return printUsage();
     }
 
     int i;
-    W_path = new Path(args[0]);
-    finalout_path = new Path("./pic_out");
-    prediff_path = new Path("./pic_prediff");
-    tempmv_path = new Path(args[1]);
-    tempmv2_path = new Path("./tempmv2_path");
-    output_path = new Path(args[2]);
+    BufferedWriter out = new BufferedWriter(new FileWriter("./time_"+args[9]+".log"));
+    W_path = new Path(args[0]+"_"+args[9]);
+    finalout_path = new Path("./pic_out_"+args[9]); //append taskid
+    prediff_path = new Path("./pic_prediff_"+args[9]);
+    thresbase = Double.parseDouble(args[1]);
+    tempmv_path = new Path("./tempmv_path_"+args[9]);
+    tempmv2_path = new Path("./tempmv2_path_"+args[9]);
+    output_path = new Path(args[2]+"_"+args[9]);
     number_nodes = Integer.parseInt(args[3]);
     nreducers = Integer.parseInt(args[4]);
     niteration = Integer.parseInt(args[5]);
@@ -490,10 +493,11 @@ public class Pic extends Configured implements Tool {
 
     local_output_path = args[2] + "_temp";
 
-    converge_threshold = ((double) 0.001 / (double) number_nodes);
+    converge_threshold = (thresbase / (double) number_nodes);
 
     System.out.println("\n-----===[PIC]===-----\n");
 
+    long startTime = System.currentTimeMillis();
 //    if (cur_iteration == 1)
 //      gen_initial_vector(number_nodes, finalout_path, start1);
 
@@ -501,7 +505,8 @@ public class Pic extends Configured implements Tool {
     for (i = cur_iteration; i <= niteration; i++) {
       System.out.println("[PIC] Computing Pic. Max iteration = " + niteration + ", threshold = "
               + converge_threshold + ", cur_iteration=" + i + "\n");
-
+      out.write(String.format("iter:%d\ttime:%d\n", i, (System.currentTimeMillis()-startTime)/1000));
+      
       JobClient.runJob(configStage1());
       JobClient.runJob(configStage2());
       RunningJob job = JobClient.runJob(configStage3());
@@ -543,12 +548,21 @@ public class Pic extends Configured implements Tool {
      * 
      * // find distribution of pageranks JobClient.runJob(configStage4(mmi.min, mmi.max));
      */
+    long endTime = System.currentTimeMillis();
+    long elapse = (endTime - startTime) / 1000;
+    long h = elapse / 3600;
+    long m = (elapse-h*3600) / 60;
+    long s = elapse - h*3600 - m*60;
     fs.delete(tempmv2_path);
     System.out.println("\n[PIC] Pic computed.");
     System.out.println("[PIC] The final Pic are in the HDFS ./pic_out.");
-    // System.out.println("[PEGASUS] The minium and maximum PageRanks are in the HDFS pr_minmax.");
-    // System.out.println("[PEGASUS] The histogram of PageRanks in 1000 bins between min_PageRank and max_PageRank are in the HDFS pr_distr.\n");
-
+    System.out.println(String.format("[PIC] total time runing PIC: %d secs (%d h %d m %d s)", elapse, h, m, s));
+    System.out.println(String.format("[PIC] total number of iteration: %d", i));
+    
+    out.write(String.format("[PIC] total time runing PIC: %d secs (%d h %d m %d s)\n", elapse, h, m, s));
+    out.write(String.format("[PIC] total number of iteration: %d", i));
+    out.close();
+    
     return 0;
   }
 

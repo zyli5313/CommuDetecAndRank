@@ -101,19 +101,21 @@ public class InitVec extends Configured implements Tool {
   // Print the command-line usage text.
   protected static int printUsage() {
     System.out
-            .println("Usage: InitVec <input_path> <output_path> <# of clusters> <# of nodes> <# of tasks>");
+            .println("Usage: InitVec <input_path> <output_path> <# of clusters> <# of nodes> <# of tasks> <taskid>");
     ToolRunner.printGenericCommandUsage(System.out);
     return -1;
   }
 
   @Override
   public int run(String[] args) throws Exception {
-    if (args.length != 5) {
+    if (args.length != 6) {
       return printUsage();
     }
+    
+    String taskid = "_" + args[5];
 
-    in_path = new Path(args[0]);
-    out_path = new Path(args[1]);
+    in_path = new Path(args[0] + taskid);
+    out_path = new Path(args[1] + taskid);
     num_clusters = Integer.parseInt(args[2]);
     num_nodes = Integer.parseInt(args[3]);
     nreducers = Integer.parseInt(args[4]);
