@@ -1,6 +1,8 @@
 package spectral;
 
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.StringTokenizer;
 
 import org.apache.hadoop.conf.Configuration;
@@ -24,14 +26,12 @@ public class EigenComb {
 		  public void map(Object key, Text value, Context context
 	                    ) throws IOException, InterruptedException {
 			  StringTokenizer itr = new StringTokenizer(value.toString());
-			  if(itr.countTokens()!=2) {
-				  System.err.println("Error Input Format!");
-				  System.exit(2);
-			  }
-			  else{
+			  if(itr.hasMoreTokens()){
 				  node.set(Integer.parseInt(itr.nextToken()));
-				  eigen.set(itr.nextToken());
-				  context.write(node,eigen);
+				  while(itr.hasMoreTokens()){
+					  eigen.set(itr.nextToken());
+					  context.write(node,eigen);
+				  }				  
 			  }
 		  }
 	  }
@@ -44,17 +44,21 @@ public class EigenComb {
 	                       Context context
 	                       ) throws IOException, InterruptedException {
 			  if(key.get()!=0){
-				  String eigen = "";
-				  String neweigen = "";
+				  String eigenall = "";
+				  List<String> eigen = new ArrayList<String>();
 				  for (Text val : values) {
 					  if(val.toString().charAt(0)=='v'){
-						  eigen = val.toString();
+						  eigen.add(val.toString());
 					  }else{
-						  neweigen = val.toString();
+						  eigen.add("v"+val.toString());
 					  }
 				  }
-				  eigen = eigen + "\t" + "v" + neweigen;
-				  result.set(eigen);
+				  for(String s:eigen){
+					  eigenall = eigenall+"\t"+s;
+				  }
+				  eigenall = eigenall.substring(1);
+				  eigenall = eigenall;
+				  result.set(eigenall);
 				  context.write(key, result);
 			  }			  
 		  }
