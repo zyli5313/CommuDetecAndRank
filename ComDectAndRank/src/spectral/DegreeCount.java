@@ -25,16 +25,21 @@ public class DegreeCount {
 	  public void map(Object key, Text value, Context context
                     ) throws IOException, InterruptedException {
 		  StringTokenizer itr = new StringTokenizer(value.toString());
-		  node1.set(itr.nextToken());
-		  node2.set(itr.nextToken());
-		  if(itr.hasMoreTokens()) {
-			  degree.set(itr.nextToken());
-			  context.write(new Text(node1+"\t"+node2),new Text("v"+degree.toString()));
-		  }
-		  context.write(new Text(node1),degree);
-		  //context.write(new Text(node2.toString()),one);
-		  context.write(new Text(node1),new Text("v"+node2.toString()));
-		  //context.write(new Text(node2.toString()),new IntWritable(-node1.get()));
+		  String s1 = itr.nextToken();
+		  String s2 = itr.nextToken();
+		  if(s1.startsWith("#")) {}//error line
+		  else{
+			  node1.set(s1);
+			  node2.set(s2);
+			  if(itr.hasMoreTokens()) {
+				  degree.set(itr.nextToken());
+				  context.write(new Text(node1+"\t"+node2),new Text("v"+degree.toString()));
+			  }
+			  context.write(new Text(node1),degree);
+			  //context.write(new Text(node2.toString()),one);
+			  context.write(new Text(node1),new Text("v"+node2.toString()));
+			  //context.write(new Text(node2.toString()),new IntWritable(-node1.get()));
+		  }		  
 	  }
   }
   

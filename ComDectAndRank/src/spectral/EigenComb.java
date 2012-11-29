@@ -27,11 +27,13 @@ public class EigenComb {
 	                    ) throws IOException, InterruptedException {
 			  StringTokenizer itr = new StringTokenizer(value.toString());
 			  if(itr.hasMoreTokens()){
+				  String s = "";
 				  node.set(Integer.parseInt(itr.nextToken()));
 				  while(itr.hasMoreTokens()){
-					  eigen.set(itr.nextToken());
-					  context.write(node,eigen);
-				  }				  
+					  s = s+"\t"+itr.nextToken();
+				  }		
+				  eigen.set(s.substring(1));
+				  context.write(node,eigen);
 			  }
 		  }
 	  }
@@ -46,18 +48,26 @@ public class EigenComb {
 			  if(key.get()!=0){
 				  String eigenall = "";
 				  List<String> eigen = new ArrayList<String>();
+				  int i = 0;
+				  String temp = null;
+				  int flag = 0;
 				  for (Text val : values) {
-					  if(val.toString().charAt(0)=='v'){
-						  eigen.add(val.toString());
+					  i++;
+					  if(i==1) {
+						  if(val.toString().charAt(0)=='v'){
+							  eigenall = eigenall+"\t"+val.toString();
+						  }else{
+							  temp = val.toString();
+							  flag = 1;
+						  }
 					  }else{
-						  eigen.add("v"+val.toString());
+						  eigenall = eigenall+"\t"+val.toString();
 					  }
 				  }
-				  for(String s:eigen){
-					  eigenall = eigenall+"\t"+s;
-				  }
+				  if(flag == 1) eigenall = eigenall+"\t"+"v"+temp;
+				  flag = 0;
+				  i = 0;
 				  eigenall = eigenall.substring(1);
-				  eigenall = eigenall;
 				  result.set(eigenall);
 				  context.write(key, result);
 			  }			  
